@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Bin Assigner" />
+<title>Barcode → Bin Assigner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/dist/tabler-icons.min.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f3ef;
+    --surface: #ffffff;
+    --surface2: #f0ede8;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --text: #1a1a18;
+    --text2: #6b6b67;
+    --text3: #9b9b96;
+    --accent: #1a1a18;
+    --accent-fg: #ffffff;
+    --success-bg: #e8f5ec;
+    --success-fg: #1a6b35;
+    --error-bg: #fdecea;
+    --error-fg: #b02a2a;
+    --info-bg: #eef3fb;
+    --info-fg: #1a4a8a;
+    --scan-line: rgba(220,60,60,0.85);
+    --radius: 14px;
+    --radius-sm: 9px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141412;
+      --surface: #1e1e1b;
+      --surface2: #272724;
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.15);
+      --text: #f0ede8;
+      --text2: #9b9b96;
+      --text3: #6b6b67;
+      --accent: #f0ede8;
+      --accent-fg: #141412;
+      --success-bg: #0d2e18;
+      --success-fg: #5ecb82;
+      --error-bg: #2e0d0d;
+      --error-fg: #f08080;
+      --info-bg: #0d1a2e;
+      --info-fg: #80a8f0;
+    }
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 24px);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0 2px;
+  }
+
+  header .icon-wrap {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+
+  header .icon-wrap i { color: var(--accent-fg); font-size: 20px; }
+
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  header p { font-size: 12px; color: var(--text2); margin-top: 1px; }
+
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    overflow: hidden;
+  }
+
+  .card-head {
+    padding: 12px 14px 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* Camera */
+  #cam-wrap {
+    position: relative;
+    aspect-ratio: 4/3;
+    background: #000;
+    overflow: hidden;
+  }
+
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+
+  .cam-placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px;
+    background: #0a0a0a;
+  }
+
+  .cam-placeholder i { font-size: 36px; color: #444; }
+  .cam-placeholder span { font-size: 13px; color: #666; }
+
+  #start-cam {
+    margin-top: 4px;
+    padding: 10px 22px;
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 99px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .scan-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+
+  .scan-corner {
+    position: absolute;
+    width: 28px; height: 28px;
+    border-color: rgba(255,255,255,0.85);
+    border-style: solid;
+    border-width: 0;
+  }
+  .scan-corner.tl { top: 20%; left: 15%; border-top-width: 3px; border-left-width: 3px; border-radius: 4px 0 0 0; }
+  .scan-corner.tr { top: 20%; right: 15%; border-top-width: 3px; border-right-width: 3px; border-radius: 0 4px 0 0; }
+  .scan-corner.bl { bottom: 20%; left: 15%; border-bottom-width: 3px; border-left-width: 3px; border-radius: 0 0 0 4px; }
+  .scan-corner.br { bottom: 20%; right: 15%; border-bottom-width: 3px; border-right-width: 3px; border-radius: 0 0 4px 0; }
+
+  .scan-beam {
+    position: absolute;
+    left: 15%; right: 15%;
+    height: 2px;
+    background: var(--scan-line);
+    top: 20%;
+    animation: beam 2s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--scan-line);
+  }
+
+  @keyframes beam {
+    0%, 100% { top: 20%; }
+    50% { top: 80%; }
+  }
+
+  #cam-status {
+    position: absolute;
+    bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    font-size: 12px;
+    padding: 5px 14px;
+    border-radius: 99px;
+    white-space: nowrap;
+    display: none;
+  }
+
+  #stop-cam {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(0,0,0,0.55);
+    border: none; border-radius: 99px;
+    color: #fff;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* Scan target toggle */
+  .scan-target-row {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px 0;
+  }
+  .scan-target-btn {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .scan-target-btn.active {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  .scan-target-hint {
+    padding: 5px 14px 0;
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* Form */
+  .form-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--text2); display: flex; align-items: center; gap: 5px; }
+  .field label .scan-active-pill {
+    font-size: 10px; font-weight: 600; padding: 1px 7px;
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: 99px; letter-spacing: 0.03em;
+    display: none;
+  }
+  .field label .scan-active-pill.visible { display: inline-block; }
+  .field input {
+    width: 100%;
+    padding: 11px 13px;
+    font-size: 16px;
+    background: var(--surface2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  .field input:focus { border-color: var(--border2); }
+  .field input::placeholder { color: var(--text3); }
+  .field input.scan-target-active { border-color: var(--accent); border-width: 1.5px; }
+
+  #assign-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    transition: opacity 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #assign-btn:active { opacity: 0.75; transform: scale(0.98); }
+
+  /* Status toast */
+  #toast {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text);
+    color: var(--bg);
+    padding: 10px 20px;
+    border-radius: 99px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 999;
+    display: flex; align-items: center; gap: 7px;
+    max-width: 90vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.success { background: var(--success-fg); color: #fff; }
+  #toast.error { background: var(--error-fg); color: #fff; }
+  #toast.info { background: var(--info-fg); color: #fff; }
+
+  /* Table */
+  .table-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 0;
+  }
+  .table-header-row h2 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .badge {
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 0.5px solid var(--border);
+  }
+  .table-actions { display: flex; gap: 8px; }
+  .tbl-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tbl-btn:active { background: var(--surface2); }
+
+  #empty-state {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text3);
+    font-size: 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  #empty-state i { font-size: 32px; opacity: 0.3; }
+
+  .assign-list { padding: 8px 0 0; }
+
+  .assign-item {
+    display: flex; align-items: center;
+    padding: 10px 14px;
+    border-top: 0.5px solid var(--border);
+    gap: 10px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .assign-item .item-main { flex: 1; min-width: 0; }
+  .item-barcode { font-size: 13px; font-family: 'SF Mono', 'Menlo', monospace; color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-meta { font-size: 12px; color: var(--text2); margin-top: 2px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .item-bin { font-weight: 600; color: var(--text); }
+  .item-note { color: var(--text3); }
+  .item-time { color: var(--text3); margin-left: auto; }
+  .del-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text3);
+    padding: 4px;
+    border-radius: 6px;
+    font-size: 17px;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+  }
+  .del-btn:active { color: var(--error-fg); }
+
+  .no-support-note {
+    padding: 10px 14px 14px;
+    font-size: 12px;
+    color: var(--text3);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="icon-wrap"><i class="ti ti-scan"></i></div>
+    <div>
+      <h1>Bin Assigner</h1>
+      <p>Scan parts → assign to bins → export CSV</p>
+    </div>
+  </header>
+
+  <!-- Camera -->
+  <div class="card">
+    <div class="card-head"><i class="ti ti-camera" aria-hidden="true"></i> Camera scanner</div>
+    <div id="cam-wrap">
+      <div class="cam-placeholder" id="cam-placeholder">
+        <i class="ti ti-camera-off"></i>
+        <span>Camera off</span>
+        <button id="start-cam"><i class="ti ti-camera"></i> Start scanning</button>
+      </div>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="scan-overlay" id="scan-overlay">
+        <div class="scan-corner tl"></div>
+        <div class="scan-corner tr"></div>
+        <div class="scan-corner bl"></div>
+        <div class="scan-corner br"></div>
+        <div class="scan-beam"></div>
+      </div>
+      <div id="cam-status"></div>
+      <button id="stop-cam"><i class="ti ti-x"></i> Stop</button>
+    </div>
+    <div class="no-support-note" id="support-note" style="display:none;"></div>
+  </div>
+
+  <!-- Manual / USB form -->
+  <div class="card">
+    <div class="card-head"><i class="ti ti-keyboard" aria-hidden="true"></i> Entry / USB scanner</div>
+    <div class="scan-target-row">
+      <button class="scan-target-btn active" id="target-part" aria-pressed="true">
+        <i class="ti ti-barcode" aria-hidden="true"></i> Scan → Part
+      </button>
+      <button class="scan-target-btn" id="target-bin" aria-pressed="false">
+        <i class="ti ti-barcode" aria-hidden="true"></i> Scan → Bin
+      </button>
+    </div>
+    <p class="scan-target-hint" id="target-hint">Camera will fill: <strong>Part barcode</strong></p>
+    <div class="form-body">
+      <div class="field">
+        <label for="barcode-input">Part barcode <span class="scan-active-pill visible" id="part-pill">scanning</span></label>
+        <input id="barcode-input" type="text" placeholder="Scan or type barcode…" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" class="scan-target-active" />
+      </div>
+      <div class="field">
+        <label for="bin-input">Bin ID <span class="scan-active-pill" id="bin-pill">scanning</span></label>
+        <input id="bin-input" type="text" placeholder="Scan or type barcode / type bin ID…" autocomplete="off" autocorrect="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="note-input">Note (optional)</label>
+        <input id="note-input" type="text" placeholder="e.g. qty: 10, condition: new" autocomplete="off" />
+      </div>
+      <button id="assign-btn"><i class="ti ti-check"></i> Assign to bin</button>
+    </div>
+  </div>
+
+  <!-- Assignments list -->
+  <div class="card" style="flex:1;">
+    <div class="table-header-row">
+      <h2>Assignments <span class="badge" id="count-badge">0</span></h2>
+      <div class="table-actions">
+        <button class="tbl-btn" id="clear-btn"><i class="ti ti-trash"></i> Clear</button>
+        <button class="tbl-btn" id="export-btn"><i class="ti ti-download"></i> Export CSV</button>
+      </div>
+    </div>
+    <div id="empty-state">
+      <i class="ti ti-inbox"></i>
+      <span>No assignments yet.<br>Scan a part to get started.</span>
+    </div>
+    <div class="assign-list" id="assign-list" style="display:none;"></div>
+  </div>
+
+</div>
+
+<div id="toast"><i class="ti ti-check" id="toast-icon"></i><span id="toast-text"></span></div>
+
+<script>
+  const assignments = [];
+  let toastTimer = null;
+  let cameraStream = null;
+  let scanInterval = null;
+  let scanTarget = 'part'; // 'part' or 'bin'
+
+  const barcodeInput = document.getElementById('barcode-input');
+  const binInput = document.getElementById('bin-input');
+  const noteInput = document.getElementById('note-input');
+  const assignBtn = document.getElementById('assign-btn');
+  const exportBtn = document.getElementById('export-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const assignList = document.getElementById('assign-list');
+  const emptyState = document.getElementById('empty-state');
+  const countBadge = document.getElementById('count-badge');
+  const startCamBtn = document.getElementById('start-cam');
+  const stopCamBtn = document.getElementById('stop-cam');
+  const video = document.getElementById('video');
+  const camPlaceholder = document.getElementById('cam-placeholder');
+  const scanOverlay = document.getElementById('scan-overlay');
+  const camStatus = document.getElementById('cam-status');
+  const toast = document.getElementById('toast');
+  const toastText = document.getElementById('toast-text');
+  const toastIcon = document.getElementById('toast-icon');
+  const supportNote = document.getElementById('support-note');
+  const targetPartBtn = document.getElementById('target-part');
+  const targetBinBtn = document.getElementById('target-bin');
+  const targetHint = document.getElementById('target-hint');
+  const partPill = document.getElementById('part-pill');
+  const binPill = document.getElementById('bin-pill');
+
+  function setScanTarget(t) {
+    scanTarget = t;
+    if (t === 'part') {
+      targetPartBtn.classList.add('active'); targetPartBtn.setAttribute('aria-pressed','true');
+      targetBinBtn.classList.remove('active'); targetBinBtn.setAttribute('aria-pressed','false');
+      barcodeInput.classList.add('scan-target-active');
+      binInput.classList.remove('scan-target-active');
+      partPill.classList.add('visible'); binPill.classList.remove('visible');
+      targetHint.innerHTML = 'Camera will fill: <strong>Part barcode</strong>';
+    } else {
+      targetBinBtn.classList.add('active'); targetBinBtn.setAttribute('aria-pressed','true');
+      targetPartBtn.classList.remove('active'); targetPartBtn.setAttribute('aria-pressed','false');
+      binInput.classList.add('scan-target-active');
+      barcodeInput.classList.remove('scan-target-active');
+      binPill.classList.add('visible'); partPill.classList.remove('visible');
+      targetHint.innerHTML = 'Camera will fill: <strong>Bin ID</strong>';
+    }
+  }
+
+  targetPartBtn.addEventListener('click', () => setScanTarget('part'));
+  targetBinBtn.addEventListener('click', () => setScanTarget('bin'));
+
+  function showToast(msg, type = 'default') {
+    toastText.textContent = msg;
+    toast.className = 'show ' + type;
+    if (type === 'success') toastIcon.className = 'ti ti-check';
+    else if (type === 'error') toastIcon.className = 'ti ti-alert-circle';
+    else toastIcon.className = 'ti ti-info-circle';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.className = ''; }, 2800);
+  }
+
+  function renderList() {
+    countBadge.textContent = assignments.length;
+    if (assignments.length === 0) {
+      emptyState.style.display = '';
+      assignList.style.display = 'none';
+      return;
+    }
+    emptyState.style.display = 'none';
+    assignList.style.display = '';
+    assignList.innerHTML = assignments.map((a, i) => `
+      <div class="assign-item">
+        <div class="item-main">
+          <div class="item-barcode">${esc(a.barcode)}</div>
+          <div class="item-meta">
+            <span class="item-bin">→ ${esc(a.bin)}</span>
+            ${a.note ? `<span class="item-note">${esc(a.note)}</span>` : ''}
+            <span class="item-time">${a.time}</span>
+          </div>
+        </div>
+        <button class="del-btn" data-i="${i}" aria-label="Remove"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+    `).join('');
+    assignList.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        assignments.splice(+btn.dataset.i, 1);
+        renderList();
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function doAssign() {
+    const barcode = barcodeInput.value.trim();
+    const bin = binInput.value.trim();
+    const note = noteInput.value.trim();
+    if (!barcode) { showToast('Enter or scan a barcode first.', 'error'); barcodeInput.focus(); return; }
+    if (!bin) { showToast('Enter a bin ID.', 'error'); binInput.focus(); return; }
+    const now = new Date();
+    const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    assignments.unshift({ barcode, bin, note, time, datetime: now.toISOString() });
+    renderList();
+    showToast(`${barcode} → ${bin}`, 'success');
+    barcodeInput.value = '';
+    noteInput.value = '';
+    barcodeInput.focus();
+  }
+
+  assignBtn.addEventListener('click', doAssign);
+  barcodeInput.addEventListener('keydown', e => { if (e.key === 'Enter') binInput.focus(); });
+  binInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAssign(); });
+
+  exportBtn.addEventListener('click', () => {
+    if (!assignments.length) { showToast('Nothing to export yet.', 'error'); return; }
+    const rows = [['Part Barcode', 'Bin ID', 'Note', 'Time', 'ISO Datetime']];
+    assignments.forEach(a => rows.push([a.barcode, a.bin, a.note || '', a.time, a.datetime]));
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bin_assignments_' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${assignments.length} assignment${assignments.length > 1 ? 's' : ''}.`, 'success');
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (!assignments.length) return;
+    if (confirm(`Clear all ${assignments.length} assignment${assignments.length > 1 ? 's' : ''}?`)) {
+      assignments.length = 0;
+      renderList();
+    }
+  });
+
+  startCamBtn.addEventListener('click', startCamera);
+  stopCamBtn.addEventListener('click', stopCamera);
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      cameraStream = stream;
+      video.srcObject = stream;
+      video.style.display = 'block';
+      camPlaceholder.style.display = 'none';
+      scanOverlay.style.display = 'block';
+      stopCamBtn.style.display = 'flex';
+
+      if ('BarcodeDetector' in window) {
+        camStatus.style.display = 'block';
+        camStatus.textContent = 'Scanning…';
+        startBarcodeDetection();
+      } else {
+        supportNote.style.display = 'block';
+        supportNote.innerHTML = '⚠️ Camera is live but auto-detection requires Chrome or Samsung Internet. In Safari, use a USB scanner or type manually. <a href="https://caniuse.com/mdn-api_barcodedetector" target="_blank" style="color:inherit;">Learn more</a>';
+        camStatus.style.display = 'block';
+        camStatus.textContent = 'Camera on – auto-detect unavailable';
+      }
+    } catch(e) {
+      showToast('Camera access denied. Check browser permissions.', 'error');
+    }
+  }
+
+  function stopCamera() {
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+    clearInterval(scanInterval);
+    video.style.display = 'none';
+    camPlaceholder.style.display = '';
+    scanOverlay.style.display = 'none';
+    stopCamBtn.style.display = 'none';
+    camStatus.style.display = 'none';
+  }
+
+  function startBarcodeDetection() {
+    const detector = new BarcodeDetector({
+      formats: ['code_128','ean_13','ean_8','qr_code','code_39','upc_a','upc_e','itf','pdf417','data_matrix','aztec','codabar']
+    });
+    let lastVal = '';
+    let lastTime = 0;
+    scanInterval = setInterval(async () => {
+      if (!video.videoWidth) return;
+      try {
+        const results = await detector.detect(video);
+        if (results.length > 0) {
+          const val = results[0].rawValue;
+          const now = Date.now();
+          if (val !== lastVal || now - lastTime > 3000) {
+            lastVal = val;
+            lastTime = now;
+            if (scanTarget === 'bin') {
+              binInput.value = val;
+              camStatus.textContent = '✓ Bin: ' + val;
+              showToast('Bin: ' + val, 'info');
+              if (navigator.vibrate) navigator.vibrate(60);
+              noteInput.focus();
+            } else {
+              barcodeInput.value = val;
+              camStatus.textContent = '✓ Part: ' + val;
+              showToast('Part: ' + val, 'info');
+              if (navigator.vibrate) navigator.vibrate(60);
+              binInput.focus();
+            }
+          }
+        }
+      } catch(e) {}
+    }, 300);
+  }
+
+  renderList();
+</script>
+</body>
+</html>
